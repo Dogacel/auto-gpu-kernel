@@ -1,0 +1,10 @@
+# --- TopK Indexer config ---
+[solution]
+name = "dogacel-agent-solution-indexer-v3"
+definition = "dsa_topk_indexer_fp8_h64_d128_topk2048_ps64"
+author = "Doğaç Eldenk"
+
+[build]
+language = "triton"
+source_dir = "triton"
+entry_point = "indexer_fused.py::kernel"

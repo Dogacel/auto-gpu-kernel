@@ -1,0 +1,10 @@
+# --- Sparse Attention config ---
+[solution]
+name = "sparse-attention"
+definition = "dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64"
+author = "YOUR NAME"
+
+[build]
+language = "triton"
+source_dir = "triton"
+entry_point = "sparse_fused.py::kernel"

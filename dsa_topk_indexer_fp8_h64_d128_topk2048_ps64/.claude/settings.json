@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "deny": [
+      "WebFetch",
+      "WebSearch",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(nc:*)",
+      "Bash(pip install:*)",
+      "Bash(uv pip install:*)",
+      "Bash(npm install:*)",
+      "Bash(git clone:*)",
+      "Bash(git fetch:*)",
+      "Bash(git pull:*)",
+      "Bash(git push:*)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllow": true,
+    "failIfUnavailable": true,
+    "autoAllowBashIfSandboxed": false,
+    "allowUnsandboxedCommands": false,
+    "network": {
+      "allowedDomains": [
+        "api.modal.com",
+        "*.modal.com",
+        "*.modaldns.com"
+      ],
+      "allowDns": true
+    },
+    "filesystem": {
+      "readPaths": ["~/.modal.toml", "/etc/resolv.conf", "/home/dogacel/miniconda3/envs/fi-bench"]
+    },
+    "excludedCommands": ["modal *", "modal"]
+  }
+}
