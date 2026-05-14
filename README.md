@@ -1,13 +1,15 @@
-# Auto GPU Kernel
+# Auto GPU Kernel 🏆
 
 Autonomous GPU-kernel discovery & optimizer.
 
-Ranked ... on [MLSys 2026 - FlashInfer AI Kernel Generation Contest](https://mlsys26.flashinfer.ai/) for the _DeepSeek Sparse Attention (DSA)_ track. Submissions can be found at:
+Ranked #1 on [MLSys 2026 - FlashInfer AI Kernel Generation Contest](https://mlsys26.flashinfer.ai/) for the _DeepSeek Sparse Attention (DSA)_ track with an average speedup of 34.93x. Submissions can be found at:
 
-| Kernel | Baseline (ms) | Ours (ms) | Speedup |
+[Technical Report](./report.pdf)
+
+| Kernel | Runtime (ms) | Speedup |
 |---|---|---|---|
-| [dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64](./dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64/) — DSA Sparse Attention | — | — | —× |
-| [dsa_topk_indexer_fp8_h64_d128_topk2048_ps64](./dsa_topk_indexer_fp8_h64_d128_topk2048_ps64/) — DSA TopK Indexer | — | — | —× |
+| [dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64](./dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64/) — DSA Sparse Attention | 0.010 |
+| [dsa_topk_indexer_fp8_h64_d128_topk2048_ps64](./dsa_topk_indexer_fp8_h64_d128_topk2048_ps64/) — DSA TopK Indexer | 0.016 |
 
 ## Setup
 
