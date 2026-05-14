@@ -48,10 +48,12 @@ That's it. The loop runs indefinitely, each iteration picks one optimization, be
 
 ## Architecture
 
+For more details on the agentic loop, please refer to the technical report.
+
 Agents:
-- Profiler:
-- Research:
-- Workload inspector:
+- Profiler
+- Research
+- Workload inspector
 
 | Command | Purpose |
 |---|---|
@@ -61,7 +63,6 @@ Agents:
 
 See `CLAUDE.md` for rules and `.claude/commands/` for full command specs.
 
-[Describe Loop Here]
 
 - `solution/triton/sparse_fused.py` — the kernel being optimized (overwritten each iteration)
 - `experiments/exp_N/` — snapshot + results for iteration N
