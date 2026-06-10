@@ -35,9 +35,9 @@ If a Modal container crash-loops (fails to boot repeatedly, not just slow), canc
 
 ## Repo layout
 
-- `solution/triton/sparse_fused.py` — the kernel you edit
-- `solution/triton/sparse_baseline.py` — PyTorch reference (read for numerical semantics)
-- `experiments/exp_N/` — per-experiment: `plan.md?`, `sparse_fused.py`, `result.md`, `bench.log`
+- `solution/triton/solution_fused.py` — the kernel you edit
+- `solution/triton/solution_baseline.py` — PyTorch reference (read for numerical semantics)
+- `experiments/exp_N/` — per-experiment: `plan.md?`, `solution_fused.py`, `result.md`, `bench.log`
 - `experiments/summary.md` — master index, one row per experiment
 - `experiments/LESSONS.md` — durable cross-experiment findings (append when a lesson recurs)
 - `scripts/ab_benchmark.py` — paired A/B harness for coupled-change disambiguation

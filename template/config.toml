@@ -7,4 +7,4 @@ author = "YOUR NAME"
 [build]
 language = "triton"
 source_dir = "triton"
-entry_point = "sparse_fused.py::kernel"
+entry_point = "solution_fused.py::kernel"

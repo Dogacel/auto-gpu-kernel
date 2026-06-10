@@ -13,7 +13,7 @@ Never overwrite an existing `result.md`. If you'd have to, stop and ask the user
 
 ## Write artifacts
 
-1. Copy `solution/triton/sparse_fused.py` into the folder (same filename).
+1. Copy `solution/triton/solution_fused.py` into the folder (same filename).
 2. Copy the Modal log produced by `/benchmark` to `bench.log` in the folder.
 3. Write `result.md`:
 
@@ -24,7 +24,7 @@ Never overwrite an existing `result.md`. If you'd have to, stop and ask the user
 
 ## Results
 - Pass: X/Y
-- Kernel latency (ms): small=S.SSS / large=L.LLL / overall=O.OOO (min / median / max)
+- Kernel latency (ms): small=S.SSS / large=L.LLL / overall=O.OOO (min / mean / median / max)
 - Reference latency (ms): R.RRR
 - Max abs err: X.XXe-X  |  Max rel err: X.XXe-X
 - Mode: quick | stride N | full  (| ab-vs-exp_K if A/B)

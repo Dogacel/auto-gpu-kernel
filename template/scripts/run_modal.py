@@ -49,6 +49,11 @@ image = (
     .env({
         "TORCH_EXTENSIONS_DIR": "/results/torch_ext_cache",
         "DSA_CUTLASS_DIR": "/results/cutlass",
+        # This image's Triton 3.6.0 ships without the `triton.backends`
+        # entry-point metadata, so default (entry-point) backend discovery
+        # finds 0 backends -> "0 active drivers" on any kernel launch. Force
+        # the in-tree directory-scan discovery instead.
+        "TRITON_BACKENDS_IN_TREE": "1",
     })
 )
 
@@ -193,3 +198,82 @@ def main(quick: bool = False, stride: int = 1, env: str = ""):
         return
 
     print_results(results)
+
+@app.local_entrypoint()
+def bench_json(stride: int = 1, env: str = ""):
+    """Run the full benchmark and write results.json: per-workload latency and
+    error boundaries, with aggregate means on top. Speedup is intentionally
+    omitted (baseline profiling is disabled to avoid wasted GPU time)."""
+    import json
+    import math
+    from scripts.pack_solution import pack_solution
+
+    print("Packing solution from source files...")
+    solution_path = pack_solution()
+    solution = Solution.model_validate_json(solution_path.read_text())
+    print(f"Loaded: {solution.name} ({solution.definition})")
+
+    env_vars = {}
+    if env:
+        for pair in env.split(","):
+            k, _, v = pair.partition("=")
+            if k:
+                env_vars[k.strip()] = v.strip()
+    env_vars = env_vars or None
+
+    print(f"\nRunning full benchmark on Modal B200 (stride={stride})...")
+    # profile_baseline stays False (default in run_benchmark) -> no baseline cost.
+    results = run_benchmark.remote(solution, stride=stride, env_vars=env_vars)
+    print_results(results)
+
+    def_name = next(iter(results))
+    traces = results[def_name]
+
+    workloads = {}
+    latencies, abs_errs, rel_errs = [], [], []
+    n_passed = 0
+    for uuid, r in traces.items():
+        rec = {
+            "status": r.get("status"),
+            "latency_ms": r.get("latency_ms"),
+            "max_abs_error": r.get("max_abs_error"),
+            "max_rel_error": r.get("max_rel_error"),
+        }
+        workloads[uuid] = rec
+        if str(r.get("status", "")).lower() == "passed":
+            n_passed += 1
+        if r.get("latency_ms") is not None:
+            latencies.append(r["latency_ms"])
+        if r.get("max_abs_error") is not None:
+            abs_errs.append(r["max_abs_error"])
+        if r.get("max_rel_error") is not None:
+            rel_errs.append(r["max_rel_error"])
+
+    def _mean(xs):
+        return sum(xs) / len(xs) if xs else None
+
+    def _std(xs):
+        if len(xs) < 2:
+            return 0.0 if xs else None
+        m = sum(xs) / len(xs)
+        return math.sqrt(sum((x - m) ** 2 for x in xs) / (len(xs) - 1))
+
+    mean = {
+        "definition": def_name,
+        "num_workloads": len(traces),
+        "num_passed": n_passed,
+        "mean_latency_ms": _mean(latencies),
+        "std_latency_ms": _std(latencies),
+        "min_latency_ms": min(latencies) if latencies else None,
+        "max_latency_ms": max(latencies) if latencies else None,
+        "mean_max_abs_error": _mean(abs_errs),
+        "worst_max_abs_error": max(abs_errs) if abs_errs else None,
+        "mean_max_rel_error": _mean(rel_errs),
+        "worst_max_rel_error": max(rel_errs) if rel_errs else None,
+    }
+
+    out = {"mean": mean, "workloads": workloads}
+    out_path = PROJECT_ROOT / "results.json"
+    out_path.write_text(json.dumps(out, indent=2))
+    print(f"\nWrote {out_path}")
+    print(f"  n_passed={n_passed}/{len(traces)} | mean_latency_ms={mean['mean_latency_ms']}")

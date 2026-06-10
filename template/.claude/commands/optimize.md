@@ -1,12 +1,12 @@
 # /optimize — autonomous optimization loop
 
-Iteratively improve `solution/triton/sparse_fused.py`. Rules in `CLAUDE.md` are non-negotiable.
+Iteratively improve `solution/triton/solution_fused.py`. Rules in `CLAUDE.md` are non-negotiable.
 
 ## Loop
 
 IMPORTANT: Make sure research agent is called every 5-10 experiments to ensure we are not going in circles.
 
-1. **Assess.** Read `sparse_fused.py`, `sparse_baseline.py`, `experiments/summary.md`, `experiments/LESSONS.md`. For directly relevant prior attempts, read `experiments/exp_N/result.md`. If the highest-numbered folder has `plan.md` but no `result.md`, implement that plan — it's reserved (see §Folder reservation).
+1. **Assess.** Read `solution_fused.py`, `solution_baseline.py`, `experiments/summary.md`, `experiments/LESSONS.md`. For directly relevant prior attempts, read `experiments/exp_N/result.md`. If the highest-numbered folder has `plan.md` but no `result.md`, implement that plan — it's reserved (see §Folder reservation).
 
 2. **Plan one change.** Early progression: PyTorch → tiled Triton → fused → tile tuning → alternative tilings. Don't skip structural wins for micro-tuning. Scan `summary.md` for similar past attempts; if close, articulate what's different *this* time.
 
@@ -20,7 +20,7 @@ IMPORTANT: Make sure research agent is called every 5-10 experiments to ensure w
 
 5. **Measure.** `/benchmark stride 2`. Before trusting the number:
    - **Reference-latency sanity**: if the ref latency is >30% off the moving median from recent `summary.md` rows, the VM is anomalous — re-run once.
-   - **Sub-5% deltas are noise on cross-VM comparison.** Confirm with `modal run scripts/ab_benchmark.py::run --a experiments/exp_<prev-best>/sparse_fused.py`.
+   - **Sub-5% deltas are noise on cross-VM comparison.** Confirm with `modal run scripts/ab_benchmark.py::run --a experiments/exp_<prev-best>/solution_fused.py`.
    - Report latency split into small/large groups when both are present; aggregated means hide regime-specific regressions.
    - If results are looking good or you are not certain due to noise, proceed with `/benchmark full`.
 

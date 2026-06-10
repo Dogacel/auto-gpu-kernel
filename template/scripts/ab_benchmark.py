@@ -3,10 +3,10 @@ Paired A/B benchmark on the same Modal VM — eliminates cross-VM reference
 latency variance (20-30%) when comparing two candidate kernels.
 
 Usage:
-    modal run scripts/ab_benchmark.py::run --a experiments/exp_N/sparse_fused.py
+    modal run scripts/ab_benchmark.py::run --a experiments/exp_N/solution_fused.py
 
 A is the baseline (e.g., previous best). B is always the current
-solution/triton/sparse_fused.py. Both are packed identically and run
+solution/triton/solution_fused.py. Both are packed identically and run
 back-to-back in one Modal function call → one container → one GPU.
 
 Reports per-workload paired delta (B − A) and aggregate win rate.
@@ -34,42 +34,23 @@ app = modal.App("flashinfer-ab")
 TRACE_SET_PATH = "/data"
 trace_volume = modal.Volume.from_name("flashinfer-trace", create_if_missing=True)
 
+# Use the SAME image as run_modal.py — the prior custom image (nvidia/cuda base
+# + pip torch/triton) failed every solution with RUNTIME_ERROR (exp_6), while
+# run_modal's flashinfer image works. Keeping them identical avoids drift and
+# makes paired A/B trustworthy.
 image = (
-    modal.Image.from_registry("nvidia/cuda:13.1.1-cudnn-devel-ubuntu24.04", add_python="3.12")
-    .apt_install("git", "git-lfs", "wget", "build-essential", "cmake")
-    .pip_install(
-        "torch",
-        extra_index_url="https://download.pytorch.org/whl/cu130",
+    modal.Image.from_registry("flashinfer/flashinfer-ci-cu132:latest", add_python="3.12")
+    .apt_install("git", "wget", "build-essential", "cmake")
+    .pip_install("huggingface_hub")
+    .run_commands(
+        "pip install --force-reinstall --upgrade "
+        "git+https://github.com/flashinfer-ai/flashinfer-bench.git@main",
     )
-    .pip_install(
-        "apache-tvm-ffi>=0.1.6,!=0.1.8,!=0.1.8.post0,<0.2",
-        "click",
-        "einops",
-        "ninja",
-        "numpy",
-        "nvidia-cudnn-frontend>=1.13.0",
-        "nvidia-cutlass-dsl>=4.3.4",
-        "nvidia-ml-py",
-        "packaging>=24.2",
-        "requests",
-        "tabulate",
-        "tqdm",
-        "responses",
-        "pytest",
-        "scipy",
-        "build",
-        "cuda-python==13.0",
-        "nvidia-cudnn-cu13>=9.14.0.64",
-        "flashinfer-bench @ git+https://github.com/flashinfer-ai/flashinfer-bench.git@80f40d45968c65840d05872516befd9691ec9fd8",
-        "tilelang",
-        "cuda-tile",
-        "cupti-python",
-        "pandas",
-        "cupy-cuda13x",
-    )
+    .pip_install("cupti-python")
     .env({
-        "LD_LIBRARY_PATH": "/opt/conda/envs/py312/lib/python3.12/site-packages/nvidia/cu13/lib/",
-        "TRITON_PTXAS_PATH": "/usr/local/cuda/bin/ptxas",
+        "TORCH_EXTENSIONS_DIR": "/results/torch_ext_cache",
+        "DSA_CUTLASS_DIR": "/results/cutlass",
+        "TRITON_BACKENDS_IN_TREE": "1",
     })
 )
 
@@ -78,16 +59,16 @@ DEFINITION = "dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64"
 
 
 def _pack(candidate_py: Path, tag: str) -> Solution:
-    """Pack a Solution using candidate_py as sparse_fused.py."""
+    """Pack a Solution using candidate_py as solution_fused.py."""
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / "triton"
         src.mkdir()
-        shutil.copy(TRITON_DIR / "sparse_baseline.py", src / "sparse_baseline.py")
-        shutil.copy(candidate_py, src / "sparse_fused.py")
+        shutil.copy(TRITON_DIR / "solution_baseline.py", src / "solution_baseline.py")
+        shutil.copy(candidate_py, src / "solution_fused.py")
         spec = BuildSpec(
             language="triton",
             target_hardware=["cuda"],
-            entry_point="sparse_fused.py::kernel",
+            entry_point="solution_fused.py::kernel",
             binding=None,
         )
         return pack_solution_from_files(
@@ -128,7 +109,7 @@ def run_ab(sol_a: Solution, sol_b: Solution, stride: int = 2) -> dict:
 @app.local_entrypoint()
 def run(a: str, stride: int = 2):
     a_path = Path(a).resolve()
-    b_path = TRITON_DIR / "sparse_fused.py"
+    b_path = TRITON_DIR / "solution_fused.py"
     assert a_path.exists(), f"A-side kernel not found: {a_path}"
 
     print(f"A (baseline): {a_path}")

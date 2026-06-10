@@ -10,4 +10,4 @@ Pipe output to a file (e.g. `bench.log` in repo root) — `/log-experiment` will
 
 If Modal crash-loops (container fails to boot repeatedly, not just slow), cancel and diagnose; don't sit waiting.
 
-Report back: pass/fail counts, absolute kernel latency (min / median / max, split small vs large when both are present), max abs/rel error, reference latency.
+Report back: pass/fail counts, absolute kernel latency (min / mean / median / max, split small vs large when both are present), max abs/rel error, reference latency.
