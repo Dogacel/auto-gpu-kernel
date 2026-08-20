@@ -203,7 +203,16 @@ function toolResult(m){
   const bad=/^(Error|Path .* not found)/i.test(txt.trim());
   block('res'+(bad?' bad':''),(bad?'✗ ':'')+'output · '+nlines(txt)+' lines',txt);
 }
-const es=new EventSource('/api/events');
+fetch('/api/runs').then(r=>r.json()).then(rs=>{
+  const sel=$('runsel'), cur=new URLSearchParams(location.search).get('run');
+  rs.slice().reverse().forEach((r,i)=>{
+    const o=document.createElement('option');
+    o.value=r.name;o.textContent=r.name+' · '+(r.size/1e6).toFixed(0)+' MB';
+    if(cur?r.name===cur:i===0)o.selected=true;
+    sel.appendChild(o);});
+  sel.onchange=()=>{location.search='?run='+sel.value;};
+}).catch(()=>{});
+const es=new EventSource('/api/events'+location.search);
 es.onopen=()=>$('status').textContent='live';
 es.onerror=()=>$('status').textContent='disconnected — retrying';
 es.onmessage=e=>{
@@ -228,7 +237,8 @@ $('expand').onchange=e=>document.querySelectorAll('#log details').forEach(d=>d.o
 log.classList.add('hide-read');
 """
 
-LOG_NAV = """<b id="model">—</b>
+LOG_NAV = """<select id="runsel" title="run log"></select>
+  <b id="model">—</b>
   <span>iter</span> <b id="iter">0</b>
   <span>logged</span> <b id="logged">0</b>
   <span>tools</span> <b id="tools">0</b>

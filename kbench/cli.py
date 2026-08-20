@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 
 from kbench import backends, config
+from kbench import task as taskmod
+from kbench.config import TaskConfig
 from kbench.harness import collect_sources
 from kbench.history import record
 from kbench.job import Job
@@ -53,8 +55,44 @@ def _env(pairs: list[str] | None) -> dict[str, str]:
     return out
 
 
+def _task_mode(cfg: TaskConfig, args):
+    """Resolve which [task.bench.<mode>] the flags name."""
+    name = getattr(args, "mode", None)
+    if not name:
+        name = "quick" if args.quick else cfg.default_mode
+    if name not in cfg.modes:
+        raise SystemExit(f"unknown bench mode {name!r}; have: {', '.join(cfg.modes)}")
+    return cfg.modes[name]
+
+
+def cmd_bench_task(cfg: TaskConfig, args) -> int:
+    mode = _task_mode(cfg, args)
+    result = taskmod.run_mode(
+        cfg, mode,
+        capture_golden=getattr(args, "capture_golden", False),
+        extra_env=_env(args.env),
+    )
+    taskmod.print_result(cfg, result)
+    taskmod.record(cfg, result)
+    if args.json:
+        from dataclasses import asdict
+
+        Path(args.json).write_text(json.dumps(asdict(result), indent=2))
+        print(f"\nwrote {args.json}")
+    return 0 if result.passed else 1
+
+
+def cmd_ab_task(cfg: TaskConfig, args) -> int:
+    mode = _task_mode(cfg, args)
+    a, b = taskmod.run_ab(cfg, args.a, mode)
+    taskmod.print_ab(cfg, a, b, args.a)
+    return 0
+
+
 def cmd_bench(args) -> int:
     cfg = config.load()
+    if isinstance(cfg, TaskConfig):
+        return cmd_bench_task(cfg, args)
     print(f"{cfg.kernel.relative_to(cfg.root)} -> {cfg.backend}/{cfg.gpu}")
 
     job = _job(cfg, {"main": collect_sources(cfg)}, args)
@@ -71,6 +109,8 @@ def cmd_bench(args) -> int:
 def cmd_ab(args) -> int:
     """Both candidates run back-to-back in one container: one VM, one GPU, paired delta."""
     cfg = config.load()
+    if isinstance(cfg, TaskConfig):
+        return cmd_ab_task(cfg, args)
     a_path = Path(args.a).resolve()
     print(f"A = {a_path}\nB = {cfg.kernel}\n")
 
@@ -88,18 +128,23 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     def add_common(p):
-        p.add_argument("--quick", action="store_true", help="smallest + largest workload only")
+        p.add_argument("--quick", action="store_true", help="smallest + largest workload only"
+                       " (task mode: the `quick` bench mode)")
+        p.add_argument("--mode", help="task mode: named [task.bench.<mode>] to run")
         p.add_argument("--stride", type=int, default=1, help="sample every Nth workload")
         p.add_argument("--env", action="append", help="K=V passed into the container")
 
     b = sub.add_parser("bench", help="benchmark the current kernel")
     add_common(b)
     b.add_argument("--json", help="write results to this path")
+    b.add_argument("--capture-golden", action="store_true",
+                   help="task mode: store this run's artifact as the golden reference")
     b.set_defaults(func=cmd_bench)
 
-    a = sub.add_parser("ab", help="paired A/B against another kernel file")
+    a = sub.add_parser("ab", help="paired A/B against another kernel file (task mode: a git ref)")
     add_common(a)
-    a.add_argument("--a", required=True, help="baseline kernel, e.g. experiments/exp_12/kernel.py")
+    a.add_argument("--a", required=True,
+                   help="baseline kernel file, or in task mode a git ref/commit")
     a.set_defaults(func=cmd_ab)
 
     args = parser.parse_args()

@@ -69,6 +69,67 @@ Or you can launch interactive mode by running `claude --dangerously-skip-permiss
 
 That's it. The loop runs indefinitely, each iteration picks one optimization, benchmarks it, logs an experiment folder, and continues. Stop with `Ctrl+C` when you want to step in. As agent struggles to find new optimizations, it will start to change its schedule to be less frequent.
 
+## Generic task mode
+
+Besides flashinfer-format kernels, `kopt`/`kbench` can optimize **any repository** with a
+self-descriptive task spec — a single TOML that names the repo, the work branch, the bench
+commands, the hardware, and the correctness contract. The spec becomes the project's
+`config.toml` verbatim; its `description` flows into the agent's AGENTS.md, so everything
+the agent needs to know about the target lives in one file you write:
+
+```toml
+[task]
+name = "my-model"
+workdir = "repo"
+metric = "seconds for the full generation (lower is better)"
+description = """what the repo is, the entry-point contract the verifier pins,
+what the correctness gate means, hardware facts, known traps..."""
+
+[task.repo]
+url = "git@github.com:org/my-model.git"
+branch = "me/auto-optimize"     # created from `base` and pushed if missing
+
+[task.hardware]
+gpus = 8
+gpu = "H100"
+
+[[task.pinned]]                  # harness-owned verifier, copied in fresh each run
+src = "verify/e2e.py"
+dst = ".kbench/verify.py"
+from_repo = "tools/e2e.py"       # snapshotted from the pristine clone at init
+
+[task.bench.quick]               # any number of named modes
+cmd = "uv run .kbench/verify.py --steps 4 --ledger {out}/ledger.json"
+artifact = "ledger.json"         # compared byte-for-byte against the golden
+golden = "golden/quick.json"
+step_regex = 'step \d+ .* (?P<ms>[0-9.]+)ms'
+```
+
+```bash
+kopt init-task ~/proj task.toml        # clone + work branch + scaffold
+cd ~/proj
+kbench bench --quick --capture-golden  # pin correctness on the pristine repo
+kbench bench --mode full --capture-golden
+kopt run ~/proj -n 100 --thinking max
+```
+
+Task mode keeps the same principles as kernel mode — absolute numbers, one optimization per
+iteration, every experiment logged, no benchmark gaming — but the benchmark is the target
+repo's own verification entry point, run locally on all configured GPUs:
+
+- **Pinned verifier**: `[[task.pinned]]` files are harness-owned copies placed fresh into
+  the working tree before every run, so agent edits can't change what "correct" means.
+- **Golden artifacts**: a mode passes only if its command exits 0 *and* the artifact it
+  writes (e.g. a per-step digest ledger) exactly equals the golden captured from the
+  unmodified repo (`--capture-golden`).
+- **Modes** are free-form (`[task.bench.<name>]`): typically a few-step `quick` run as the
+  numerical-correctness gate, a `perf` timing loop, and a `full` end-to-end run whose
+  seconds are the metric of record.
+- `kbench ab --a <git-ref>` benchmarks a past commit in a temporary worktree back-to-back
+  with the current tree on the same machine.
+- The agent commits each logged experiment to the target repo and pushes to the configured
+  work branch.
+
 ## Architecture
 
 For more details on the agentic loop, please refer to the technical report.

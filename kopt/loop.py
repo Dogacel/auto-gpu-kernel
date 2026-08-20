@@ -48,6 +48,8 @@ class Loop:
     """Seconds to wait for one turn. omp-rpc defaults to 30s, which no real
     optimization iteration finishes inside."""
     model: str | None = None
+    thinking: str | None = None
+    """omp thinking level: off|minimal|low|medium|high|xhigh|max."""
     fresh: bool = False
     """Start a new omp session each iteration instead of persisting one."""
     history: list[Iteration] = field(default_factory=list)
@@ -93,8 +95,13 @@ class Loop:
         client = RpcClient(
             cwd=str(self.project),
             model=self.model,
+            thinking=self.thinking,
             extra_args=tuple(extra),
             request_timeout=self.timeout,
+            # The default 10k-event ring is smaller than one verbose turn
+            # (high-thinking iterations stream 10M+ tokens); overflow makes
+            # prompt_and_wait lose agent_end and raises RpcError mid-run.
+            max_event_history=None,
         ).start()  # spawns the process; RpcClient() alone does not
         client.install_headless_ui()
         log.attach(client)
