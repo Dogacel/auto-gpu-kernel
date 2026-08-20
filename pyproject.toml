@@ -1,0 +1,32 @@
+[project]
+name = "kbench"
+version = "0.1.0"
+description = "Kernel benchmarking with pluggable remote GPU backends, and an agent loop over it"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+modal = ["modal"]
+fal = ["fal"]
+# The kopt agent loop. omp-rpc is not on PyPI; it lives in the oh-my-pi repo.
+agent = ["omp-rpc @ git+https://github.com/can1357/oh-my-pi.git#subdirectory=python/omp-rpc"]
+# Only needed for the `local` backend — sources are packed inside the container on
+# modal/fal. flashinfer-python ships no macOS wheels, hence the marker.
+local = [
+  "flashinfer-bench; sys_platform == 'linux'",
+  "cupti-python; sys_platform == 'linux'",
+]
+
+[project.scripts]
+kbench = "kbench.cli:main"
+kopt = "kopt.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["kbench", "kopt"]

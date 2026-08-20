@@ -1,0 +1,42 @@
+# DSA Sparse Attention — MLSys 2026 FlashInfer contest kernel.
+# Copy to your project as config.toml.
+
+[kernel]
+definition = "dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64"
+language = "triton"
+source_dir = "triton"
+entry_point = "solution_fused.py::kernel"
+
+[remote]
+backend = "modal"   # local | modal | fal   (override: KBENCH_BACKEND)
+gpu = "B200"
+gpu_count = 1
+timeout_s = 1800
+
+[remote.image]
+base = "flashinfer/flashinfer-ci-cu132:latest"
+apt = ["git", "wget", "build-essential", "cmake"]
+# cupti-python is required for accurate GPU timing; without it the timer falls back
+# to CUDA events and over-reports latency by launch overhead (~2-4us per call).
+pip = ["huggingface_hub", "cupti-python"]
+run = [
+  "pip install --force-reinstall --upgrade git+https://github.com/flashinfer-ai/flashinfer-bench.git@main",
+]
+
+[remote.image.env]
+TORCH_EXTENSIONS_DIR = "/results/torch_ext_cache"
+DSA_CUTLASS_DIR = "/results/cutlass"
+# This image's Triton ships without `triton.backends` entry-point metadata, so default
+# discovery finds 0 backends -> "0 active drivers". Force in-tree directory scan.
+TRITON_BACKENDS_IN_TREE = "1"
+
+[remote.data]
+path = "/data"                    # mount point inside the container (fal: /data/flashinfer-trace)
+modal_volume = "flashinfer-trace"
+local_path = "~/flashinfer-trace"
+
+[bench]
+warmup_runs = 3
+iterations = 100
+num_trials = 5
+profile_baseline = false

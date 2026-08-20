@@ -1,4 +1,9 @@
-# /log-experiment
+---
+name: log-experiment
+description: Record the most recent optimization attempt — snapshot the kernel, write result.md, append to the summary index. Use after every benchmark, including failures.
+---
+
+# log-experiment
 
 Log the most recent experiment. Never skip — failures are as valuable as wins.
 
@@ -13,14 +18,15 @@ Never overwrite an existing `result.md`. If you'd have to, stop and ask the user
 
 ## Write artifacts
 
-1. Copy `solution/triton/solution_fused.py` into the folder (same filename).
-2. Copy the Modal log produced by `/benchmark` to `bench.log` in the folder.
+1. Copy the kernel (the `entry_point` file from `config.toml`) into the folder, same filename.
+2. Copy the benchmark log to `bench.log` in the folder.
 3. Write `result.md`:
 
 ```markdown
 # Experiment N — YYYY-MM-DD
 
 **Description:** what changed, why. Reference `plan.md` when implementing one.
+**Runner:** <backend> / <gpu>   (from config.toml — results are only comparable within one backend)
 
 ## Results
 - Pass: X/Y
@@ -36,9 +42,9 @@ What was learned. What to try or avoid next. If durable cross-experiment insight
 4. Append to `experiments/summary.md` (create with header row if missing):
 
 ```markdown
-| Exp | Date | Description | Latency | Ref | Pass | Notes |
-|---|---|---|---|---|---|---|
-| N | YYYY-MM-DD | one phrase | O.OOO ms | R.RRR ms | X/Y | Δ% vs prior best, "new best" / "regression" / "ablation" |
+| Exp | Date | Description | Latency | Ref | Pass | Backend | Notes |
+|---|---|---|---|---|---|---|---|
+| N | YYYY-MM-DD | one phrase | O.OOO ms | R.RRR ms | X/Y | modal/B200 | Δ% vs prior best, "new best" / "regression" / "ablation" |
 ```
 
 Keep `Notes` terse. Detail lives in `result.md`.

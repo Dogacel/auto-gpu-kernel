@@ -1,0 +1,16 @@
+# Unattended runs: auto-approve everything, then deny what the project rules forbid.
+# NOTE: this gates *tools*, not network egress. `read` resolves URLs too, so true
+# isolation has to come from the sandbox/container, not from here.
+tools:
+  approvalMode: yolo
+  approval:
+    # "No web access" (AGENTS.md)
+    web_search: deny
+    browser: deny
+    github: deny
+    # "Don't ask anything to the user" — the loop is headless, a prompt would hang it
+    ask: deny
+    # Irrelevant to kernel work; denying keeps the tool surface (and token cost) down
+    computer: deny
+    generate_image: deny
+    tts: deny
