@@ -10,7 +10,7 @@ from kbench.results import WorkloadResult
 
 
 def run(cfg, job: Job) -> dict[str, list[WorkloadResult]]:
-    from kbench.harness import evaluate
+    from kbench.flashinfer import evaluate
 
     trace = Path(cfg.local_path)
     if not trace.exists():

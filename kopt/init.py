@@ -158,15 +158,22 @@ def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
 
 
 def init_task(project: Path, taskspec: Path, force: bool = False) -> Path:
-    """Scaffold a generic task project from a self-descriptive task spec TOML.
+    """Create an isolated task project from a short, human-authored brief.
 
-    The spec *is* the project's config.toml. Everything else — the repo clone on its
-    work branch, pinned verifier snapshots, AGENTS.md, skills — derives from it.
+    The target repository is cloned below the project. A first agent turn later reads
+    it without modifying it, builds ``harness/``, and tailors the project-local skills.
     """
     import tomllib
 
     from kbench.config import _load_task
 
+    source_checkout = Path(__file__).resolve().parents[1]
+    resolved_project = project.resolve()
+    if resolved_project == source_checkout or resolved_project.is_relative_to(source_checkout):
+        raise SystemExit(
+            "task projects must live outside the auto-gpu-kernel source checkout; "
+            "choose a separate work directory"
+        )
     if project.exists() and any(project.iterdir()) and not force:
         raise SystemExit(f"{project} exists and is not empty (use --force)")
     project.mkdir(parents=True, exist_ok=True)
@@ -196,20 +203,11 @@ def init_task(project: Path, taskspec: Path, force: bool = False) -> Path:
             if push.returncode != 0:
                 print(f"  warning: could not push work branch: {push.stderr.strip()}")
 
-    # --- snapshot pinned files from the pristine repo ----------------------
-    for pin in cfg.pinned:
-        if pin.from_repo:
-            src = work / pin.from_repo
-            dst = project / pin.src
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(src, dst)
-
-    (project / "golden").mkdir(exist_ok=True)
     experiments = project / "experiments"
     experiments.mkdir(exist_ok=True)
     (experiments / "summary.md").write_text(
         "# Experiment index\n\n"
-        "| Exp | Date | Description | Metric (s) | Pass | Mode | Notes |\n"
+        "| Exp | Date | Description | Metric | Pass | Mode | Notes |\n"
         "|---|---|---|---|---|---|---|\n"
     )
     (experiments / "LESSONS.md").write_text(
@@ -221,29 +219,29 @@ def init_task(project: Path, taskspec: Path, force: bool = False) -> Path:
     # --- agent home --------------------------------------------------------
     omp = project / ".omp"
     omp.mkdir(exist_ok=True)
-    modes = "\n".join(
-        f"| `kbench bench --mode {m.name}` | `{m.cmd}` | timeout {m.timeout_s}s |"
-        for m in cfg.modes.values()
-    )
     task_section = (
-        f"## This task\n\n"
-        f"**Task:** `{cfg.name}`\n"
-        f"**You edit:** the repo working tree at `{cfg.workdir}/` "
-        f"(branch `{cfg.branch}`, pushed to `origin/{cfg.branch}`)\n"
-        f"**Hardware:** {cfg.gpus}x {cfg.gpu}, local\n"
-        f"**Metric:** {cfg.metric}\n\n"
-        f"{cfg.description.strip()}\n\n"
-        f"### Bench modes\n\n"
-        f"| Command | Underlying command | Limits |\n|---|---|---|\n{modes}\n"
+        "## The user's brief\n\n"
+        f"**Task:** `{cfg.name}`\n\n"
+        f"**Target repository:** `{cfg.workdir}/` (branch `{cfg.branch or cfg.base}`)\n\n"
+        f"**Hardware:** {cfg.gpus}x {cfg.gpu}, local\n\n"
+        f"### Objective\n\n{cfg.objective}\n\n"
+        f"### How to measure\n\n{cfg.measure}\n\n"
+        f"### How to validate\n\n{cfg.validate}\n\n"
+        f"### Hints\n\n{cfg.hints or 'None supplied.'}\n"
     )
     (omp / "AGENTS.md").write_text(
-        (ASSETS / "task" / "core.md").read_text().rstrip() + "\n\n" + task_section
+        (ASSETS / "task" / "bootstrap.md").read_text().rstrip()
+        + "\n\n"
+        + (ASSETS / "task" / "core.md").read_text().rstrip()
+        + "\n\n"
+        + task_section
     )
     shutil.copy(ASSETS / "config.yml", omp / "config.yml")
     for kind in ("skills", "agents"):
         shutil.copytree(ASSETS / "task" / kind, omp / kind, dirs_exist_ok=True)
 
-    # Project-level repo for experiments history; the target repo manages itself.
+    # Project-level repo owns the generated harness and experiment history. The target
+    # clone is ignored and manages its own commits independently.
     if not (project / ".git").exists():
         (project / ".gitignore").write_text(
             f"{cfg.workdir}/\n.kopt/\n.kbench/\n__pycache__/\n*.log\nresults.json\n"

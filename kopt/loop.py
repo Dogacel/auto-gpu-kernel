@@ -145,7 +145,8 @@ class Loop:
         log = Recorder(new_run_log(self.project))
         print(f"run log: {log.path}")
         log.write("run_start", project=str(self.project), model=self.model or "(default)",
-                  max_iterations=self.max_iterations, budget=self.budget, fresh=self.fresh)
+                  thinking=self.thinking or "(default)", max_iterations=self.max_iterations,
+                  budget=self.budget, fresh=self.fresh)
         self._client = None
         self._base = (0.0, 0, 0)
 

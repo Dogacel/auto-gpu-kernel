@@ -34,50 +34,17 @@ class ImageSpec:
 
 
 @dataclass(frozen=True)
-class BenchMode:
-    """One named benchmark mode of a task project (e.g. quick / perf / full)."""
-
-    name: str
-    cmd: str
-    """Shell command run with cwd=<workdir>. Placeholders: {out} = artifact dir."""
-    timeout_s: int = 1800
-    golden: str = ""
-    """Project-relative golden JSON; compared for exact equality against `artifact`."""
-    artifact: str = ""
-    """Filename the command writes into {out} (e.g. ledger.json)."""
-    metric_regex: str = ""
-    """Regex over stdout with a named group `value` (float, seconds)."""
-    step_regex: str = ""
-    """Regex over stdout with named group `ms`; findall gives per-step latencies."""
-    metric_json: tuple[str, ...] = ()
-    """(artifact_name, dotted.path) — read the metric from an artifact JSON instead."""
-
-
-@dataclass(frozen=True)
-class PinnedFile:
-    """A harness-owned file copied fresh into the workdir before every bench.
-
-    Pinning is what keeps the measurement trustworthy: the verifier the benchmark
-    runs is the project's copy, not whatever currently sits in the (agent-edited)
-    working tree.
-    """
-
-    src: str  # project-relative
-    dst: str  # workdir-relative
-    from_repo: str = ""  # repo-relative origin, snapshotted once by `kopt init-task`
-
-
-@dataclass(frozen=True)
 class TaskConfig:
-    """A generic optimization task: a git repo, bench commands, and a metric."""
+    """Human-authored intent for optimizing an arbitrary repository."""
 
     root: Path
     # [task]
     name: str
-    description: str
+    objective: str
+    measure: str
+    validate: str
+    hints: str
     workdir: str
-    metric: str
-    lower_is_better: bool
     # [task.repo]
     repo_url: str
     branch: str
@@ -88,11 +55,6 @@ class TaskConfig:
     # [task.env]
     env: dict[str, str]
     path_prepend: str
-    # [[task.pinned]]
-    pinned: tuple[PinnedFile, ...]
-    # [task.bench.*]
-    modes: dict[str, BenchMode]
-    default_mode: str
 
     backend: str = "local"  # provenance label; task mode always runs locally
 
@@ -105,31 +67,35 @@ def _load_task(root: Path, raw: dict) -> TaskConfig:
     task = raw["task"]
     repo = task.get("repo", {})
     hw = task.get("hardware", {})
-    bench = task.get("bench", {})
-    if not bench:
-        raise SystemExit("config.toml: [task] needs at least one [task.bench.<mode>]")
-
-    modes = {}
-    for name, m in bench.items():
-        mj = m.get("metric_json", ())
-        modes[name] = BenchMode(
-            name=name,
-            cmd=m["cmd"],
-            timeout_s=int(m.get("timeout_s", 1800)),
-            golden=m.get("golden", ""),
-            artifact=m.get("artifact", ""),
-            metric_regex=m.get("metric_regex", ""),
-            step_regex=m.get("step_regex", ""),
-            metric_json=tuple(mj),
+    workdir = task.get("workdir", "repo")
+    resolved_work = (root / workdir).resolve()
+    if resolved_work == root.resolve() or not resolved_work.is_relative_to(root.resolve()):
+        raise SystemExit("config.toml: task.workdir must be a child of the task project")
+    objective = task.get("objective", task.get("description", "")).strip()
+    measure = task.get("measure", task.get("metric", "")).strip()
+    validate = task.get("validate", "").strip()
+    missing = [
+        name
+        for name, value in (
+            ("task.name", task.get("name")),
+            ("task.objective", objective),
+            ("task.measure", measure),
+            ("task.validate", validate),
+            ("task.repo.url", repo.get("url")),
         )
+        if not value
+    ]
+    if missing:
+        raise SystemExit(f"config.toml: missing {', '.join(missing)}")
 
     return TaskConfig(
         root=root,
         name=task["name"],
-        description=task.get("description", ""),
-        workdir=task.get("workdir", "repo"),
-        metric=task.get("metric", "seconds (lower is better)"),
-        lower_is_better=task.get("lower_is_better", True),
+        objective=objective,
+        measure=measure,
+        validate=validate,
+        hints=task.get("hints", "").strip(),
+        workdir=workdir,
         repo_url=repo.get("url", ""),
         branch=repo.get("branch", ""),
         base=repo.get("base", "main"),
@@ -137,12 +103,6 @@ def _load_task(root: Path, raw: dict) -> TaskConfig:
         gpu=hw.get("gpu", "GPU"),
         env={str(k): str(v) for k, v in task.get("env", {}).items()},
         path_prepend=task.get("path_prepend", ""),
-        pinned=tuple(
-            PinnedFile(src=p["src"], dst=p["dst"], from_repo=p.get("from_repo", ""))
-            for p in task.get("pinned", [])
-        ),
-        modes=modes,
-        default_mode=task.get("default_mode", "full" if "full" in modes else next(iter(modes))),
     )
 
 
@@ -177,7 +137,7 @@ class Config:
         return self.sources / self.entry_point.split("::")[0]
 
 
-def load(root: Path | None = None) -> Config:
+def load(root: Path | None = None) -> Config | TaskConfig:
     root = Path(root or os.environ.get("KBENCH_ROOT") or Path.cwd()).resolve()
     # Walk up so `kbench` works from anywhere inside the project (e.g. the task workdir).
     for candidate in (root, *root.parents):

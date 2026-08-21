@@ -7,9 +7,10 @@ systemPrompt: |
 
   ## Read first
 
-  - `AGENTS.md` — the source of truth for the task, workdir, hardware, correctness
-    contract, and the no-gaming rules (never touch `.kbench/` or `golden/`).
-  - `config.toml` — bench modes and their commands.
+  - `AGENTS.md` — the source of truth for the task, editable paths, hardware,
+    correctness contract, and no-gaming rules.
+  - `config.toml`, `harness/validate.py`, `harness/benchmark.py`, and
+    `harness/README.md` — task intent and the generated quick/full adapters.
   - The **code under optimization** — identify the discrete phases in *this* version.
   - `experiments/summary.md`, `experiments/LESSONS.md` — prior findings.
   - `experiments/profile.md` if recent (check git) — don't re-run what's fresh.

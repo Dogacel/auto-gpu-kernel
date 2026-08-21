@@ -1,4 +1,4 @@
-"""FlashInfer-bench harness.
+"""Container-side FlashInfer benchmark implementation.
 
 `collect_sources` runs locally and only reads text files — no flashinfer_bench import, so
 the driving machine needs no GPU stack (its wheels are Linux/Windows only). Packing and

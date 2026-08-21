@@ -266,42 +266,67 @@ async function draw(){
   let h=[],ex=[]; try{h=await (await fetch('/api/history')).json();
     ex=await (await fetch('/api/experiments')).json();}catch(e){return;}
   const byKernel={}; ex.forEach(e=>{if(e.kernel)byKernel[e.kernel]=e;});
+  // Kernel runs report mean_latency_ms. Generic tasks report an arbitrary metric,
+  // its unit/direction, and the harness revision that defined the measurement.
+  const task=h.some(d=>d.metric_value!=null);
+  let rows=h.filter(d=>(task?d.metric_value:d.mean_latency_ms)!=null);
+  let unit='ms',lower=true,hiddenHarness=0;
+  if(task&&rows.length){
+    const latest=rows.reduce((a,b)=>(a.t||0)>(b.t||0)?a:b);
+    unit=latest.metric||''; lower=latest.lower_is_better!==false;
+    const before=rows.length;
+    rows=rows.filter(d=>d.harness===latest.harness&&d.metric===unit
+      &&(d.lower_is_better!==false)===lower);
+    hiddenHarness=before-rows.length;
+  }
+  const value=d=>Number(task?d.metric_value:d.mean_latency_ms);
+  const sample=(d,name)=>Number(task?(d['sample_'+name]??d.metric_value)
+                                      :(d[name+'_latency_ms']??d.mean_latency_ms));
+  const number=v=>Number(v).toFixed(4);
   // `quick` samples only the smallest+largest workload, so its mean is not comparable
   // with a full/stride sweep. Probes never move the curve.
   const showQ=$('showQuick').checked;
-  const real=h.filter(d=>d.mean_latency_ms!=null&&d.mode!=='quick');
-  const probes=h.filter(d=>d.mean_latency_ms!=null&&d.mode==='quick');
-  $('nprobe').textContent=showQ?'':probes.length+' probes hidden';
+  const real=rows.filter(d=>d.mode!=='quick');
+  const probes=rows.filter(d=>d.mode==='quick');
+  const notes=[];
+  if(!showQ&&probes.length)notes.push(probes.length+' probes hidden');
+  if(hiddenHarness)notes.push(hiddenHarness+' older harness results hidden');
+  $('nprobe').textContent=notes.join(' · ');
   const pts=showQ?real.concat(probes).sort((a,b)=>a.t-b.t):real;
   if(!pts.length){$('chart').innerHTML='<p style="color:var(--dim)">no measurements yet</p>';return;}
   const W=1200,H=420,L=64,R=16,T=18,B=30;
-  const ys=pts.map(d=>d.mean_latency_ms),lo=Math.min(...ys),hi=Math.max(...ys);
-  const ly=v=>Math.log10(Math.max(v,1e-6)), y0=ly(lo*0.85), y1=ly(hi*1.15);
+  const ys=pts.map(value),lo=Math.min(...ys),hi=Math.max(...ys),logScale=lo>0;
+  const pad=(hi-lo)*.15||Math.abs(hi)*.1||1;
+  const scale=v=>logScale?Math.log10(Math.max(v,1e-12)):v;
+  const y0=scale(logScale?lo*.85:lo-pad),y1=scale(logScale?hi*1.15:hi+pad);
   const X=i=>L+(pts.length<2?0:i*(W-L-R)/(pts.length-1));
-  const Y=v=>T+(y1-ly(v))/((y1-y0)||1)*(H-T-B);
-  let best=Infinity,seg=[];
-  pts.forEach((d,i)=>{if(d.mode==='quick')return;best=Math.min(best,d.mean_latency_ms);
+  const Y=v=>T+(y1-scale(v))/((y1-y0)||1)*(H-T-B);
+  let best=lower?Infinity:-Infinity,seg=[];
+  pts.forEach((d,i)=>{if(d.mode==='quick')return;
+    best=lower?Math.min(best,value(d)):Math.max(best,value(d));
     seg.push((seg.length?'L':'M')+X(i).toFixed(1)+' '+Y(best).toFixed(1));});
   const dots=pts.map((d,i)=>{
-    const bad=d.num_passed<d.num_workloads,q=d.mode==='quick';
-    return '<circle class="'+(bad?'ptbad':q?'ptq':'pt')+'" cx="'+X(i).toFixed(1)+'" cy="'+Y(d.mean_latency_ms).toFixed(1)
-      +'" r="'+(q?2:4)+'"><title>'+d.mean_latency_ms.toFixed(4)+' ms · '+d.num_passed+'/'+d.num_workloads
+    const bad=d.passed===false||d.num_passed<d.num_workloads,q=d.mode==='quick';
+    return '<circle class="'+(bad?'ptbad':q?'ptq':'pt')+'" cx="'+X(i).toFixed(1)+'" cy="'+Y(value(d)).toFixed(1)
+      +'" r="'+(q?2:4)+'"><title>'+number(value(d))+' '+unit+' · '+d.num_passed+'/'+d.num_workloads
       +' · '+d.mode+' · '+(d.kernel||'').slice(0,8)
+      +(task?' · harness '+(d.harness||'').slice(0,8):'')
       +((byKernel[d.kernel]||{}).desc?'\n'+byKernel[d.kernel].exp+': '+byKernel[d.kernel].desc:'')
       +'</title></circle>';}).join('');
   const labels=pts.map((d,i)=>{const e=byKernel[d.kernel]; if(!e||d.mode==='quick')return '';
-    return '<text x="'+X(i).toFixed(1)+'" y="'+(Y(d.mean_latency_ms)-10).toFixed(1)
+    return '<text x="'+X(i).toFixed(1)+'" y="'+(Y(value(d))-10).toFixed(1)
       +'" text-anchor="middle" style="fill:var(--warn)">'+esc(e.exp)+'</text>';}).join('');
-  const ticks=[hi,Math.sqrt(hi*lo),lo].map(v=>
-    '<text x="6" y="'+(Y(v)+4).toFixed(1)+'">'+v.toFixed(4)+' ms</text>'
+  const middle=logScale?Math.sqrt(hi*lo):(hi+lo)/2;
+  const ticks=[hi,middle,lo].map(v=>
+    '<text x="6" y="'+(Y(v)+4).toFixed(1)+'">'+number(v)+' '+unit+'</text>'
     +'<line class="ax" x1="'+L+'" y1="'+Y(v).toFixed(1)+'" x2="'+(W-R)+'" y2="'+Y(v).toFixed(1)+'"/>').join('');
   $('chart').innerHTML='<svg viewBox="0 0 '+W+' '+H+'">'+ticks+'<path class="best" d="'+seg.join(' ')+'"/>'+dots+labels+'</svg>';
-  const bestOf=Math.min(...real.map(d=>d.mean_latency_ms));
-  $('tbl').innerHTML='<tr><th>#</th><th>exp</th><th>mean</th><th>min</th><th>max</th><th>pass</th><th>mode</th><th>change</th></tr>'
-    +pts.map((d,i)=>'<tr'+(d.mean_latency_ms===bestOf?' style="color:var(--acc)"':'')+'><td>'+(i+1)+'</td><td>'
+  const bestOf=real.length?(lower?Math.min(...real.map(value)):Math.max(...real.map(value))):null;
+  $('tbl').innerHTML='<tr><th>#</th><th>exp</th><th>value ('+esc(unit)+')</th><th>min</th><th>max</th><th>pass</th><th>mode</th><th>change</th></tr>'
+    +pts.map((d,i)=>'<tr'+(value(d)===bestOf?' style="color:var(--acc)"':'')+'><td>'+(i+1)+'</td><td>'
       +esc((byKernel[d.kernel]||{}).exp||'')+'</td><td>'
-      +d.mean_latency_ms.toFixed(4)+'</td><td>'+(d.min_latency_ms||0).toFixed(4)+'</td><td>'
-      +(d.max_latency_ms||0).toFixed(4)+'</td><td>'+d.num_passed+'/'+d.num_workloads+'</td><td>'
+      +number(value(d))+'</td><td>'+number(sample(d,'min'))+'</td><td>'
+      +number(sample(d,'max'))+'</td><td>'+d.num_passed+'/'+d.num_workloads+'</td><td>'
       +d.mode+'</td><td>'+esc((byKernel[d.kernel]||{}).desc||'')+'</td></tr>').join('');
 }
 draw(); setInterval(draw,15000); $('showQuick').onchange=draw;

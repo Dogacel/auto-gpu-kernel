@@ -26,7 +26,7 @@ def run(cfg, job: Job) -> dict[str, list[WorkloadResult]]:
     import fal
     from fal.container import ContainerImage
 
-    from kbench.harness import evaluate
+    from kbench.flashinfer import evaluate
 
     machine = MACHINE_TYPES.get(cfg.gpu.upper().replace("-", ""))
     if machine is None:

@@ -1,58 +1,41 @@
 ---
 name: log-experiment
-description: Record the most recent optimization attempt — snapshot the change, write result.md, append to the summary index, commit and push. Use after every benchmark, including failures.
+description: Record one source or harness experiment with candidate and harness provenance, then commit it in the correct repository.
 ---
 
 # log-experiment
 
-Log the most recent experiment. Never skip — failures are as valuable as wins.
+Log the most recent attempt, including failures.
 
-## Pick folder
+## Pick the folder
 
-List `experiments/exp_*/`. Let `N` = highest number.
-- If `exp_N/plan.md` exists without `result.md` → use `exp_N/`.
-- Else → create `exp_(N+1)/`.
-- No folders yet → `exp_1/`.
+Use the highest `experiments/exp_N/` that has `plan.md` but no `result.md`; otherwise
+create the next numbered folder. Never overwrite an existing `result.md`.
 
-Never overwrite an existing `result.md`. If you'd have to, stop and end the turn.
+## Preserve the evidence
 
-## Write artifacts
+1. Save the uncommitted target diff as `change.patch`. If this was a harness experiment,
+   also save `git diff -- harness .omp` as `harness.patch`.
+2. Copy `bench.log` into the experiment folder.
+3. Write `result.md` with:
+   - description and hypothesis;
+   - candidate revision and harness revision from kbench;
+   - quick or full mode;
+   - validation status;
+   - absolute metric value and unit;
+   - sample distribution when present;
+   - A/B baseline, delta, and whether lower or higher is better;
+   - what was learned and what to try next.
+4. Append one terse row to `experiments/summary.md` with the candidate and harness
+   revisions. Add durable findings to `experiments/LESSONS.md`.
 
-1. Snapshot the change: `git -C <workdir> diff HEAD > experiments/exp_N/change.patch`
-   (before committing), and copy the primary edited file(s) into the folder.
-2. Copy the benchmark log to `bench.log` in the folder.
-3. Write `result.md`:
+## Commit in the right place
 
-```markdown
-# Experiment N — YYYY-MM-DD
+- Target-source experiment: commit changed target files in `<workdir>/` with an
+  `exp_N:` message and push the configured work branch. Never force-push.
+- Harness or instruction experiment: commit `harness/` and `.omp/` in the outer project.
+- Commit `experiments/` in the outer project for every attempt.
 
-**Description:** what changed, why. Reference `plan.md` when implementing one.
-**Rev:** <workdir git rev from the kbench output>
-**Runner:** local / <gpu> x<count>   (from config.toml)
-
-## Results
-- Pass: yes|no   Golden: match|MISMATCH (first diff)
-- Metric: S.SSS s   (mode: quick | perf | full | ab-vs-<ref>)
-- Forwards (ms): min / mean / median / max
-- Baseline / prev best: S.SSS s → delta %
-
-## Learnings
-What was learned. What to try or avoid next. If durable cross-experiment insight, also
-append one line to `experiments/LESSONS.md`.
-```
-
-4. Append to `experiments/summary.md`:
-
-```markdown
-| N | YYYY-MM-DD | one phrase | S.SSS s | yes/no | perf/full | Δ% vs prior best, "new best" / "regression" / "ablation" |
-```
-
-Keep `Notes` terse. Detail lives in `result.md`.
-
-## Commit and push
-
-5. In the **workdir** (the target repo): if the tree changed, `git add -A && git commit`
-   with message `exp_N: <one phrase>, <metric>s` and **push to the work branch** from
-   `config.toml` (`git push origin <branch>`). Reverted/failed experiments whose tree is
-   back to the previous commit need no commit. Never force-push; never commit `.kbench/`.
-6. In the **project root**: `git add experiments && git commit -m "exp_N: <one phrase>"`.
+Never modify or stage `config.toml` or auto-gpu-kernel. A reverted failure with no
+remaining target change needs no target commit, but its experiment record is still
+committed.

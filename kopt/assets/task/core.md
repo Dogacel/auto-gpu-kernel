@@ -1,73 +1,49 @@
 # Task optimization project
 
-Autonomous performance optimization of a real repository. The target repo, its bench
-commands, the hardware, and the correctness contract all come from `config.toml` — read it
-first. The full task description is in §This task below.
+Kbench owns the experiment lifecycle. The project-local harness supplies only the
+repository-specific validation and measurement adapters.
 
 ## Non-negotiable rules
 
-- **Absolute seconds only.** Speedup ratios compound noise; every claim is an absolute
-  measurement from `kbench`, tied to the git rev it measured.
-- **One optimization per iteration.** Coupled changes misattribute wins. For small deltas
-  (<2%), confirm with `kbench ab --a <git-ref-of-prev-best>` (back-to-back on this machine).
-- **Benchmark through `kbench`.** Never hand-roll the final benchmark; ad-hoc scripts are
-  fine for *investigation*, but every logged number comes from `kbench bench`.
-- **Correctness is the golden artifact.** A run passes only if the pinned verifier exits 0
-  and its artifact matches the golden byte-for-byte-equal JSON. There is no "close enough";
-  a MISMATCH is a failed experiment no matter how fast it ran.
-- **Log every experiment** via `/skill:log-experiment`, including failures.
-- **One optimization per turn, then stop.** After you have logged the experiment, end your
-  turn. A supervisor re-invokes you immediately with fresh context — you are not ending the
-  optimization, only this step of it.
-- **No benchmark gaming.** Never touch the pinned verifier copies (anything under
-  `.kbench/` in the workdir) or the `golden/` dir. No memoizing outputs across forward
-  calls, no input-pointer caching, no special-casing the verifier's frozen inputs, no
-  detecting "am I being benchmarked". Every optimization must hold for arbitrary real
-  requests, not just the pinned one.
-- **No web access.** You work from the repo and local files only. Do not search the web
-  or read remote URLs.
-- **Don't ask the user anything.** You are autonomous; the user will not answer.
+- Edit only the target clone and this project's `harness/`, `.omp/`, and `experiments/`.
+  Never modify the auto-gpu-kernel source checkout.
+- Benchmark through kbench. It runs validation before measurement, parses the standard
+  results, records provenance, and uses the same current harness for both sides of A/B.
+- Use absolute metric values. Confirm small changes with paired A/B on the same machine.
+- Make one attributable change per iteration. A harness change is an experiment too;
+  avoid mixing it with a target-source optimization.
+- Harness changes may fix measurement, improve repeatability, or strengthen coverage.
+  Never weaken validation to make a candidate pass or special-case benchmark inputs.
+- Every result carries a harness revision. Do not compare numbers from different
+  revisions without rerunning the candidates with the same current harness.
+- Log every experiment via `/skill:log-experiment`, including failures.
+- After logging one experiment, end the turn. The supervisor starts the next iteration.
+- Do not ask the user questions. Work from the local repository and its documentation.
 
-## Skills
-
-| Skill | Purpose |
-|---|---|
-| `/skill:optimize` | Main loop — one optimization, benchmarked and logged |
-| `/skill:log-experiment` | Snapshot the change + write `result.md` + update the index + push |
-
-## Benchmarking
+## Standard commands
 
 ```bash
-kbench bench --quick        # few-step run: correctness gate + smoke timing (~1-2 min)
-kbench bench --mode perf    # clean repeated-forward timing (~2-3 min)
-kbench bench --mode full    # the real full generation — lock in final numbers (~5-8 min)
-kbench ab --a <git-ref>     # back-to-back A/B against a past commit, same machine
+kbench bench --quick 2>&1 | tee bench.log   # cheap validation + measurement
+kbench bench 2>&1 | tee bench.log           # full validation + metric of record
+kbench ab --a <git-ref>                     # same current harness, A then B
 ```
 
-**Capture the output**: `kbench bench --quick 2>&1 | tee bench.log` — `/skill:log-experiment`
-copies `bench.log` into the experiment folder, so a run you didn't tee is a run you can't log.
+Kbench calls:
 
-`kbench` copies the pinned verifier into the workdir, runs the mode's command with all GPUs
-visible, streams its output, checks the artifact against the golden, and appends to the
-`.kopt/bench.jsonl` timeline. Exit 0 = passed.
+- `harness/validate.py --repo ... --mode quick|full --output ...`
+- `harness/benchmark.py --repo ... --mode quick|full --output ...`
 
-After a benchmark, report: pass/fail, golden status, the metric in seconds, per-forward
-ms stats (min/mean/median/max), and the workdir rev it measured.
+The scripts may call any repo-native tools they need. Kbench owns their invocation,
+timeouts, output contract, result history, and A/B comparison.
 
-## Repo layout
+## Project boundary
 
-- `config.toml` — the task spec: repo, bench modes, hardware, correctness contract
-- `<workdir>/` — the target repo working tree (see §This task); this is what you edit
-- `verify/`, `golden/` — pinned verifier + golden artifacts. **Read-only.**
-- `experiments/exp_N/` — per-experiment: `plan.md?`, change snapshot, `result.md`, `bench.log`
-- `experiments/summary.md` — master index, one row per experiment
-- `experiments/LESSONS.md` — durable cross-experiment findings
+- `config.toml` — the human-authored task brief; do not change it during optimization.
+- `<workdir>/` — the independently cloned target repository.
+- `harness/` — project-local validation, benchmark adapters, fixtures, and documentation.
+- `.omp/` — project-local agent instructions and skills.
+- `experiments/` — plans, patches, logs, and result summaries.
 
-## Git
-
-Two repos, two roles:
-- **The target repo** (`<workdir>/`): commit after every logged experiment that changed it —
-  wins *and* reverts — with a message naming the experiment (e.g. `exp_12: fuse rope+quant,
-  287.4s`), and **push to the work branch** named in `config.toml`. Never force-push.
-  Never commit into `.kbench/`.
-- **The project root**: commit `experiments/` after each `/skill:log-experiment`.
+The target clone and outer project are separate git repositories. Commit target-source
+changes in the target repo. Commit harness, instruction, and experiment changes in the
+outer project. Never force-push.

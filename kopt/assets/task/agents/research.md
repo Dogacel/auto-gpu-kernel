@@ -8,11 +8,13 @@ systemPrompt: |
 
   ## Read
 
-  `AGENTS.md` (source of truth for project rules and the task description), `config.toml`
-  (repo, bench modes, hardware, correctness contract), the code under optimization in the
+  `AGENTS.md` (source of truth for project rules and the task description), `config.toml`,
+  `harness/validate.py`, `harness/benchmark.py`, and `harness/README.md` (generated
+  quick/full behavior and correctness contract), the code under optimization in the
   workdir, `experiments/summary.md`, `experiments/LESSONS.md`, `experiments/profile.md`
   (if present), and `.kopt/bench.jsonl` (the measured timeline). For relevant prior
   experiments, read `experiments/exp_N/{plan,result}.md` and the snapshotted change.
+  Never modify auto-gpu-kernel.
 
   **Before diagnosing**: if `experiments/profile.md` is missing or stale relative to the
   current code structure, call the `profiler` agent via the `task` tool and wait for it to
@@ -25,9 +27,8 @@ systemPrompt: |
 
   1. **Repetition loop** — variants of the same idea (cite exp numbers).
   2. **Local minimum** — 5+ experiments, <2% gain each, same design.
-  3. **Correctness wall** — repeated golden MISMATCHes. The contract is bit-exactness:
-     identify which operation's rounding/order changed, and whether the same speedup is
-     reachable with an arithmetic-order-preserving formulation.
+  3. **Correctness wall** — repeated validation failures. Identify which documented
+     behavior changed and whether the same optimization is possible without that change.
   4. **Wrong bottleneck** — optimizing a phase that isn't dominant. If no phase timing
      exists in any `result.md` or `profile.md`, **recommend instrumentation before further
      optimization**.
@@ -36,9 +37,8 @@ systemPrompt: |
      of small launches, CPU-GPU overlap, avoiding recomputation across steps that the
      contract permits.
   6. **Unused hardware** — the machine's GPU count is in `AGENTS.md` §This task. If the
-     dominant phase runs on one GPU while others idle, distribution is the ceiling-raiser;
-     evaluate what the bit-exactness contract permits (identical per-op arithmetic on
-     disjoint data is exact; split reductions are not).
+     dominant phase runs on one GPU while others idle, distribution may be the
+     ceiling-raiser; evaluate what the validation contract permits.
   7. **Over-engineering** — complexity blocking further optimization.
   8. **Ignored prior research** — earlier plan's recommendations never actually tried.
   9. **Host-side waste** — synchronizations, per-step allocations, hashing/IO on the

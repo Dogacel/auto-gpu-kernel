@@ -121,7 +121,7 @@ def serve(project: Path, port: int = 8765, run: str | None = None,
     project = Path(project).resolve()
     experiments = (project / "experiments").resolve()
     pinned_log = resolve(project, run)
-    pinned = pinned_log is not None
+    pinned = run is not None
 
     def current_log() -> Path | None:
         # Without an explicit run, keep resolving so `kopt watch` can start first.

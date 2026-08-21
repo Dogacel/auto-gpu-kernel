@@ -20,14 +20,14 @@ def _image(cfg):
         img = img.run_commands(cmd)
     if cfg.image.env:
         img = img.env(dict(cfg.image.env))
-    # Ships the kbench package so harness.evaluate resolves remotely.
+    # Ships the kbench package so flashinfer.evaluate resolves remotely.
     return img.add_local_python_source("kbench")
 
 
 def run(cfg, job: Job) -> dict[str, list[WorkloadResult]]:
     import modal
 
-    from kbench.harness import evaluate
+    from kbench.flashinfer import evaluate
 
     app = modal.App("kbench")
     volume = modal.Volume.from_name(cfg.modal_volume, create_if_missing=True)
